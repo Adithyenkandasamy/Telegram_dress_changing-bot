@@ -37,10 +37,10 @@ async def image_handler(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("Please wait, processing...")  # Notify the user of processing
         
         # Call Gradio API with images for virtual try-on
-        try_on_image_url = await send_to_gradio(user_sessions[user_id]["person_image"], user_sessions[user_id]["garment_image"])
+        try_on_image_path = await send_to_gradio(user_sessions[user_id]["person_image"], user_sessions[user_id]["garment_image"])
         
-        if try_on_image_url:
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(try_on_image_url, 'rb'))
+        if try_on_image_path:
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(try_on_image_path, 'rb'))
             await update.message.reply_text("Here is your virtual try-on result!")
         else:
             await update.message.reply_text("Sorry, something went wrong with the try-on process.")
@@ -69,15 +69,16 @@ async def send_to_gradio(person_image_url, garment_image_url):
                 api_name="/tryon"
             )
 
-            # Assuming the result is a URL of the processed image
+            # Assuming the result returns a relative file path
             if result and len(result) > 0:
-                image_url = result[0]  # If the result is a URL
-                img_data = requests.get(image_url).content  # Fetch the image data
-                output_image_path = 'static/result.png'
+                image_file_path = result[0]  # Gradio may return a relative file path
 
-                # Save the image data to a file
+                # Download the image to a local path
+                output_image_path = 'static/result.png'
+                img_data = requests.get(image_file_path).content  # Fetch the image data
                 with open(output_image_path, 'wb') as f:
                     f.write(img_data)
+
                 return output_image_path  # Return the path of the processed image
         except Exception as e:
             print(f"Error interacting with Gradio API: {e}")
