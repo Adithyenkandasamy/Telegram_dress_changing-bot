@@ -10,8 +10,7 @@ from secret import TELEGRAM_API_KEY
 # Load environment variables from .env file
 load_dotenv()
 
-# Telegram bot token and other configurations
-
+# Initialize Gradio Client
 gradio_client = GradioClient("Nymbo/Virtual-Try-On")
 
 # In-memory storage for tracking sessions
@@ -38,10 +37,12 @@ async def image_handler(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("Please wait, processing...")  # Notify the user of processing
         
         # Call Gradio API with images for virtual try-on
-        try_on_image_url = await send_to_gradio(user_sessions[user_id]["person_image"], user_sessions[user_id]["garment_image"])
+        try_on_image_path = await send_to_gradio(user_sessions[user_id]["person_image"], user_sessions[user_id]["garment_image"])
         
-        if try_on_image_url:
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=try_on_image_url)
+        if try_on_image_path:
+            # Open the image file and send it as a file
+            with open(try_on_image_path, 'rb') as photo:
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=photo)
             await update.message.reply_text("Here is your virtual try-on result!")
         else:
             await update.message.reply_text("Sorry, something went wrong with the try-on process.")
@@ -70,11 +71,11 @@ async def send_to_gradio(person_image_url, garment_image_url):
             )
 
             if result and len(result) > 0:
-                try_on_image_path = result[0]
-                img = cv2.imread(try_on_image_path)
-                target_path_png = 'static/result.png'
-                cv2.imwrite(target_path_png, img)
-                return target_path_png  # Return the path of the processed image
+                # Save the output image from Gradio
+                output_image_path = 'static/result.png'
+                with open(output_image_path, 'wb') as f:
+                    f.write(result[0])  # Assuming result[0] contains the image data
+                return output_image_path  # Return the path of the processed image
         except Exception as e:
             print(f"Error interacting with Gradio API: {e}")
             return None
@@ -97,4 +98,5 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.PHOTO, image_handler))
 
 # Start polling
-app.run_polling()
+if __name__ == '__main__':
+    app.run_polling()
