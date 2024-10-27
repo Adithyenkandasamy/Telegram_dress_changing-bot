@@ -10,7 +10,7 @@ from secret import TELEGRAM_API_KEY
 # Load environment variables from .env file
 load_dotenv()
 
-# Initialize Gradio Client
+# Initialize Gradio client
 gradio_client = GradioClient("Nymbo/Virtual-Try-On")
 
 # In-memory storage for tracking sessions
@@ -37,12 +37,10 @@ async def image_handler(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("Please wait, processing...")  # Notify the user of processing
         
         # Call Gradio API with images for virtual try-on
-        try_on_image_path = await send_to_gradio(user_sessions[user_id]["person_image"], user_sessions[user_id]["garment_image"])
+        try_on_image_url = await send_to_gradio(user_sessions[user_id]["person_image"], user_sessions[user_id]["garment_image"])
         
-        if try_on_image_path:
-            # Open the image file and send it as a file
-            with open(try_on_image_path, 'rb') as photo:
-                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=photo)
+        if try_on_image_url:
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(try_on_image_url, 'rb'))
             await update.message.reply_text("Here is your virtual try-on result!")
         else:
             await update.message.reply_text("Sorry, something went wrong with the try-on process.")
@@ -59,6 +57,7 @@ async def send_to_gradio(person_image_url, garment_image_url):
 
     if person_image_path and garment_image_path:
         try:
+            # Make the Gradio API call
             result = gradio_client.predict(
                 dict={"background": file(person_image_path), "layers": [], "composite": None},
                 garm_img=file(garment_image_path),
@@ -70,11 +69,15 @@ async def send_to_gradio(person_image_url, garment_image_url):
                 api_name="/tryon"
             )
 
+            # Assuming the result is a URL of the processed image
             if result and len(result) > 0:
-                # Save the output image from Gradio
+                image_url = result[0]  # If the result is a URL
+                img_data = requests.get(image_url).content  # Fetch the image data
                 output_image_path = 'static/result.png'
+
+                # Save the image data to a file
                 with open(output_image_path, 'wb') as f:
-                    f.write(result[0])  # Assuming result[0] contains the image data
+                    f.write(img_data)
                 return output_image_path  # Return the path of the processed image
         except Exception as e:
             print(f"Error interacting with Gradio API: {e}")
@@ -98,5 +101,4 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.PHOTO, image_handler))
 
 # Start polling
-if __name__ == '__main__':
-    app.run_polling()
+app.run_polling()
