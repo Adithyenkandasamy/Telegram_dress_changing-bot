@@ -2,16 +2,16 @@ import os
 import requests
 import cv2
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
 from dotenv import load_dotenv
 from gradio_client import Client as GradioClient, file
+from secret import TELEGRAM_API_KEY
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Telegram bot token and other configurations
-TELEGRAM_API_KEY = os.getenv("TELEGRAM_API_KEY")
-print("Loaded Token:", TELEGRAM_API_KEY)  # Debug statement to check the token
+
 gradio_client = GradioClient("Nymbo/Virtual-Try-On")
 
 # In-memory storage for tracking sessions
@@ -21,13 +21,13 @@ user_sessions = {}
 app = ApplicationBuilder().token(TELEGRAM_API_KEY).build()
 
 # Command to start interaction
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text("Welcome to the Virtual Try-On bot! Please send a photo of yourself to start the virtual try-on process.")
 
 # Handler for receiving images
-async def image_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def image_handler(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
-    photo_file = update.message.photo[-1].get_file()
+    photo_file = await update.message.photo[-1].get_file()
 
     # Save the user’s photo to in-memory sessions based on steps
     if user_id not in user_sessions:
@@ -53,8 +53,8 @@ async def image_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 # Function to interact with the Gradio API
 async def send_to_gradio(person_image_url, garment_image_url):
-    person_image_path = await download_image(person_image_url, 'person_image.jpg')
-    garment_image_path = await download_image(garment_image_url, 'garment_image.jpg')
+    person_image_path = download_image(person_image_url, 'person_image.jpg')
+    garment_image_path = download_image(garment_image_url, 'garment_image.jpg')
 
     if person_image_path and garment_image_path:
         try:
@@ -81,7 +81,7 @@ async def send_to_gradio(person_image_url, garment_image_url):
     return None
 
 # Helper function to download an image from Telegram
-async def download_image(url, filename):
+def download_image(url, filename):
     try:
         response = requests.get(url)
         if response.status_code == 200:
