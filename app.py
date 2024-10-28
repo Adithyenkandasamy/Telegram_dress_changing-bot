@@ -1,10 +1,11 @@
 import os
 import requests
-import cv2
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
 from dotenv import load_dotenv
-from gradio_client import Client as GradioClient, file
+from gradio_client import Client as GradioClient
+from gradio_client import handle_file   # Import handle_file as file for compatibility
+
 from secret import TELEGRAM_API_KEY
 
 # Load environment variables from .env file
@@ -35,7 +36,7 @@ async def image_handler(update: Update, context: CallbackContext) -> None:
     elif "person_image" in user_sessions[user_id] and "garment_image" not in user_sessions[user_id]:
         user_sessions[user_id]["garment_image"] = photo_file.file_path
         await update.message.reply_text("Please wait, processing...")  # Notify the user of processing
-        
+
         # Call Gradio API with images for virtual try-on
         try_on_image_path = await send_to_gradio(user_sessions[user_id]["person_image"], user_sessions[user_id]["garment_image"])
         
@@ -59,8 +60,8 @@ async def send_to_gradio(person_image_url, garment_image_url):
         try:
             # Make the Gradio API call
             result = gradio_client.predict(
-                dict={"background": file(person_image_path), "layers": [], "composite": None},
-                garm_img=file(garment_image_path),
+                dict={"background": handle_file(person_image_path), "layers": [], "composite": None},
+                garm_img=handle_file(garment_image_path),
                 garment_des="A cool description of the garment",
                 is_checked=True,
                 is_checked_crop=False,
@@ -69,16 +70,12 @@ async def send_to_gradio(person_image_url, garment_image_url):
                 api_name="/tryon"
             )
 
-            # Assuming the result returns a relative file path
-            if result and len(result) > 0:
-                image_file_path = result[0]  # Gradio may return a relative file path
-
-                # Download the image to a local path
+            # Download and save the image locally if Gradio returns a file URL
+            if result and isinstance(result[0], str) and result[0].startswith("http"):
                 output_image_path = 'static/result.png'
-                img_data = requests.get(image_file_path).content  # Fetch the image data
+                img_data = requests.get(result[0]).content
                 with open(output_image_path, 'wb') as f:
                     f.write(img_data)
-
                 return output_image_path  # Return the path of the processed image
         except Exception as e:
             print(f"Error interacting with Gradio API: {e}")
@@ -88,11 +85,12 @@ async def send_to_gradio(person_image_url, garment_image_url):
 # Helper function to download an image from Telegram
 def download_image(url, filename):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
-            with open(filename, 'wb') as f:
+            full_path = os.path.join("static", filename)
+            with open(full_path, 'wb') as f:
                 f.write(response.content)
-            return filename
+            return full_path
     except Exception as err:
         print(f"Error downloading image: {err}")
     return None
